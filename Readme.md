@@ -73,3 +73,11 @@ The full ranked data is also saved to JSON after each run.
 
 - Data source is exactly: https://fmic.pl/uklad-chlodzenia/intercoolery
 - Some products may be skipped if no 3D dimensions in `mm` can be detected.
+
+### When Cherio does not work
+```bash
+npm install cheerio@1.0.0-rc.12 --save-exact
+```
+```
+npm ls cheerio undici
+```
