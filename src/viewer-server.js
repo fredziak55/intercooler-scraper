@@ -1,89 +1,126 @@
-const http = require('node:http');
-const fs = require('node:fs/promises');
-const path = require('node:path');
+let allProducts = []; // Tu będziemy trzymać wszystkie pobrane z JSON-a dane
+let currentData = []; // Tu trzymamy dane aktualnie wyświetlane (po filtrach)
+let currentSortColumn = 'originalRank'; // Domyślne sortowanie
+let sortAscending = true; // Kierunek sortowania
 
-const PORT = Number.parseInt(process.env.PORT || '3000', 10);
-const OUTPUT_FILE = process.env.OUTPUT_FILE || 'output/intercooler-value-ranking.json';
-const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
-
-const contentTypes = {
-  '.css': 'text/css; charset=utf-8',
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8'
-};
-
-async function readFileIfExists(filePath) {
+async function loadData() {
   try {
-    return await fs.readFile(filePath, 'utf8');
+    const response = await fetch('../output/wyniki.json');
+    if (!response.ok) throw new Error('Nie udało się załadować pliku wyniki.json');
+
+    const data = await response.json();
+    
+    // Dodajemy każdemu elementowi jego "oryginalne miejsce" w rankingu 
+    // żeby po posortowaniu po cenie dalej wiedzieć, które miał miejsce.
+    allProducts = data.map((item, index) => {
+      return { ...item, originalRank: index + 1 };
+    });
+
+    currentData = [...allProducts]; // Na start wyświetlamy wszystko
+    renderTable(currentData);
+
   } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      return null;
-    }
-
-    throw error;
+    console.error('Błąd:', error);
+    document.getElementById('error-msg').style.display = 'block';
+    document.getElementById('error-msg').innerHTML = `
+      Wystąpił błąd podczas ładowania danych.<br><br>
+      Pamiętaj żeby odpalić serwer, np. przez <code>npx serve</code> w głównym folderze!
+    `;
   }
 }
 
-async function sendResponse(response, statusCode, body, contentType) {
-  response.writeHead(statusCode, {
-    'Content-Type': contentType,
-    'Cache-Control': 'no-store'
+// Renderowanie tabeli
+function renderTable(dataToRender) {
+  const tbody = document.getElementById('results-body');
+  tbody.innerHTML = ''; // Czyścimy tabelę
+
+  if (dataToRender.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">Brak wyników dla podanych filtrów.</td></tr>`;
+    return;
+  }
+
+  dataToRender.forEach(item => {
+    const tr = document.createElement('tr');
+
+    let rankDisplay = item.originalRank;
+    if (rankDisplay === 1) rankDisplay = '🥇 1';
+    if (rankDisplay === 2) rankDisplay = '🥈 2';
+    if (rankDisplay === 3) rankDisplay = '🥉 3';
+
+    tr.innerHTML = `
+      <td><strong>${rankDisplay}</strong></td>
+      <td>${item.name}</td>
+      <td>${item.wymiary}<br><small>(${item.pojemnoscCm3.toFixed(2)} cm³)</small></td>
+      <td class="price-col">${item.price.toFixed(2)} PLN</td>
+      <td><strong>${item.cenaZaCm3.toFixed(4)}</strong></td>
+      <td><a href="${item.url}" target="_blank" class="btn btn-link">Zobacz</a></td>
+    `;
+    tbody.appendChild(tr);
   });
-  response.end(body);
 }
 
-async function handleRequest(request, response) {
-  const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+// Filtrowanie
+function applyFilters() {
+  const minPrice = parseFloat(document.getElementById('min-price').value) || 0;
+  const maxPrice = parseFloat(document.getElementById('max-price').value) || Infinity;
 
-  if (request.method !== 'GET') {
-    await sendResponse(response, 405, 'Method Not Allowed', 'text/plain; charset=utf-8');
-    return;
-  }
+  currentData = allProducts.filter(item => {
+    return item.price >= minPrice && item.price <= maxPrice;
+  });
 
-  if (requestUrl.pathname === '/api/data') {
-    const jsonPath = path.resolve(process.cwd(), OUTPUT_FILE);
-    const rawJson = await readFileIfExists(jsonPath);
+  // Po nałożeniu filtrów, sortujemy według ostatnio wybranej kolumny
+  sortData(currentSortColumn, sortAscending);
+}
 
-    if (!rawJson) {
-      await sendResponse(
-        response,
-        404,
-        JSON.stringify({ error: `Missing JSON file at ${OUTPUT_FILE}` }),
-        'application/json; charset=utf-8'
-      );
-      return;
+// Reset filtrów
+function resetFilters() {
+  document.getElementById('min-price').value = '';
+  document.getElementById('max-price').value = '';
+  currentData = [...allProducts];
+  sortData('originalRank', true); // powrót do domyślnego sortowania
+}
+
+// Sortowanie
+function sortData(column, asc = true) {
+  currentSortColumn = column;
+  sortAscending = asc;
+
+  currentData.sort((a, b) => {
+    let valA = a[column];
+    let valB = b[column];
+
+    // Porównywanie tekstów (nazwy modelu) vs liczb
+    if (typeof valA === 'string') {
+      return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else {
+      return asc ? valA - valB : valB - valA;
     }
+  });
 
-    await sendResponse(response, 200, rawJson, 'application/json; charset=utf-8');
-    return;
-  }
-
-  const normalizedPath = requestUrl.pathname === '/' ? '/index.html' : requestUrl.pathname;
-  const assetPath = path.resolve(PUBLIC_DIR, `.${normalizedPath}`);
-
-  if (!assetPath.startsWith(PUBLIC_DIR)) {
-    await sendResponse(response, 400, 'Bad Request', 'text/plain; charset=utf-8');
-    return;
-  }
-
-  const fileContents = await readFileIfExists(assetPath);
-  if (fileContents === null) {
-    await sendResponse(response, 404, 'Not Found', 'text/plain; charset=utf-8');
-    return;
-  }
-
-  const ext = path.extname(assetPath).toLowerCase();
-  await sendResponse(response, 200, fileContents, contentTypes[ext] || 'application/octet-stream');
+  renderTable(currentData);
 }
 
-const server = http.createServer((request, response) => {
-  handleRequest(request, response).catch((error) => {
-    response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-    response.end(`Internal Server Error: ${error.message}`);
+// --- Event Listenery ---
+
+// Kliknięcie w przycisk "Filtruj"
+document.getElementById('filter-btn').addEventListener('click', applyFilters);
+
+// Kliknięcie w przycisk "Resetuj"
+document.getElementById('reset-btn').addEventListener('click', resetFilters);
+
+// Klikanie w nagłówki tabeli (sortowanie)
+document.querySelectorAll('th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const column = th.getAttribute('data-sort');
+    
+    // Jeśli klikamy w tę samą kolumnę co ostatnio, odwracamy kierunek
+    if (currentSortColumn === column) {
+      sortData(column, !sortAscending);
+    } else {
+      sortData(column, true); // Zawsze zaczynamy od sortowania rosnąco przy nowej kolumnie
+    }
   });
 });
 
-server.listen(PORT, () => {
-  process.stdout.write(`Viewer running at http://localhost:${PORT}\n`);
-});
+// Uruchomienie przy starcie
+loadData();

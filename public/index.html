@@ -1,382 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Intercooler Value Ranking</title>
-  <link rel="stylesheet" href="/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ranking Intercoolerów</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="shell">
-    <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">Intercooler value ranking</p>
-        <h1>Find the best PLN per cm3 value.</h1>
-        <p class="subtitle">
-          Browse the ranked intercooler list, sort by the metric you care about, and filter down to the exact price or size range you want.
-        </p>
+
+  <div class="container">
+    <h1>🏆 Ranking opłacalności intercoolerów</h1>
+    <p class="subtitle">Posortowane od najlepszego stosunku ceny do pojemności rdzenia (PLN/cm³)</p>
+
+    <div class="filters">
+      <div class="filter-group">
+        <label for="min-price">Cena od (PLN):</label>
+        <input type="number" id="min-price" placeholder="np. 300">
       </div>
-
-      <div class="hero-stats" id="stats"></div>
-    </section>
-
-    <section class="filters" aria-label="Filters and sorting">
-      <div class="controls">
-        <div class="control">
-          <label for="search">Search</label>
-          <input id="search" type="search" placeholder="Product name or URL" />
-        </div>
-
-        <div class="control">
-          <label for="sortBy">Sort by</label>
-          <select id="sortBy">
-            <option value="unitPrice">Unit price</option>
-            <option value="price">Price</option>
-            <option value="volumeCm3">Volume</option>
-            <option value="name">Name</option>
-          </select>
-        </div>
-
-        <div class="control">
-          <label for="minPrice">Min price</label>
-          <input id="minPrice" type="number" step="0.01" min="0" placeholder="0" />
-        </div>
-
-        <div class="control">
-          <label for="maxPrice">Max price</label>
-          <input id="maxPrice" type="number" step="0.01" min="0" placeholder="Any" />
-        </div>
-
-        <div class="actions">
-          <button class="button primary" id="sortDirection" type="button">Ascending</button>
-          <button class="button" id="resetFilters" type="button">Reset</button>
-        </div>
+      <div class="filter-group">
+        <label for="max-price">Cena do (PLN):</label>
+        <input type="number" id="max-price" placeholder="np. 1500">
       </div>
+      <button id="filter-btn" class="btn btn-primary">Filtruj</button>
+      <button id="reset-btn" class="btn btn-secondary">Resetuj</button>
+    </div>
 
-      <div class="controls">
-        <div class="control">
-          <label for="minUnitPrice">Min PLN/cm3</label>
-          <input id="minUnitPrice" type="number" step="0.0001" min="0" placeholder="0" />
-        </div>
+    <div id="error-msg" class="error" style="display: none;"></div>
 
-        <div class="control">
-          <label for="maxUnitPrice">Max PLN/cm3</label>
-          <input id="maxUnitPrice" type="number" step="0.0001" min="0" placeholder="Any" />
-        </div>
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="originalRank" class="sortable">Miejsce ↕</th>
+          <th data-sort="name" class="sortable">Nazwa modelu ↕</th>
+          <th data-sort="pojemnoscCm3" class="sortable">Pojemność ↕</th>
+          <th data-sort="price" class="sortable">Cena ↕</th>
+          <th data-sort="cenaZaCm3" class="sortable">Opłacalność ↕</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody id="results-body">
+        </tbody>
+    </table>
+  </div>
 
-        <div class="control">
-          <label for="minVolume">Min volume cm3</label>
-          <input id="minVolume" type="number" step="0.01" min="0" placeholder="0" />
-        </div>
-
-        <div class="control">
-          <label for="maxVolume">Max volume cm3</label>
-          <input id="maxVolume" type="number" step="0.01" min="0" placeholder="Any" />
-        </div>
-
-        <div class="control">
-          <label for="onlyBest">Focus</label>
-          <select id="onlyBest">
-            <option value="all">All results</option>
-            <option value="top10">Top 10 only</option>
-            <option value="top25">Top 25 only</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="meta-row">
-        <div id="resultCount">Loading data...</div>
-        <div id="lastUpdated"></div>
-      </div>
-    </section>
-
-    <section class="table-card">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Product</th>
-              <th>Price</th>
-              <th>Dimensions</th>
-              <th>Volume</th>
-              <th>Unit price</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody">
-            <tr><td colspan="6" class="empty">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-
-  <script>
-    const state = {
-      data: [],
-      filters: {
-        search: '',
-        sortBy: 'unitPrice',
-        sortDirection: 'asc',
-        minPrice: '',
-        maxPrice: '',
-        minUnitPrice: '',
-        maxUnitPrice: '',
-        minVolume: '',
-        maxVolume: '',
-        onlyBest: 'all'
-      }
-    };
-
-    const els = {
-      stats: document.getElementById('stats'),
-      search: document.getElementById('search'),
-      sortBy: document.getElementById('sortBy'),
-      minPrice: document.getElementById('minPrice'),
-      maxPrice: document.getElementById('maxPrice'),
-      minUnitPrice: document.getElementById('minUnitPrice'),
-      maxUnitPrice: document.getElementById('maxUnitPrice'),
-      minVolume: document.getElementById('minVolume'),
-      maxVolume: document.getElementById('maxVolume'),
-      onlyBest: document.getElementById('onlyBest'),
-      sortDirection: document.getElementById('sortDirection'),
-      resetFilters: document.getElementById('resetFilters'),
-      resultCount: document.getElementById('resultCount'),
-      lastUpdated: document.getElementById('lastUpdated'),
-      tableBody: document.getElementById('tableBody')
-    };
-
-    const currency = new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      maximumFractionDigits: 2
-    });
-
-    const decimal = new Intl.NumberFormat('pl-PL', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-
-    const precise = new Intl.NumberFormat('pl-PL', {
-      minimumFractionDigits: 4,
-      maximumFractionDigits: 6
-    });
-
-    function createStat(label, value) {
-      return `
-        <div class="stat">
-          <div class="stat-label">${label}</div>
-          <div class="stat-value">${value}</div>
-        </div>
-      `;
-    }
-
-    function parseNumber(value) {
-      if (value === '') {
-        return null;
-      }
-
-      const parsed = Number.parseFloat(value);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-
-    function getBestValueRow(rows) {
-      if (!rows.length) {
-        return null;
-      }
-
-      return rows.reduce((best, item) => (item.unitPrice < best.unitPrice ? item : best));
-    }
-
-    function updateStats(rows) {
-      const best = getBestValueRow(rows);
-      const worst = rows[rows.length - 1];
-      const averageUnit = rows.reduce((sum, item) => sum + item.unitPrice, 0) / rows.length;
-
-      els.stats.innerHTML = [
-        createStat('Loaded items', String(state.data.length)),
-        createStat('Visible items', String(rows.length)),
-        createStat('Best value', best ? `${precise.format(best.unitPrice)} PLN/cm3` : '—'),
-        createStat('Average value', rows.length ? `${precise.format(averageUnit)} PLN/cm3` : '—')
-      ].join('');
-
-      els.lastUpdated.textContent = rows.length
-        ? `Best value: ${best.name} · Worst visible: ${worst.name}`
-        : 'No visible products for the selected filters.';
-    }
-
-    function matchesSearch(item, search) {
-      if (!search) {
-        return true;
-      }
-
-      const haystack = `${item.name} ${item.url}`.toLowerCase();
-      return haystack.includes(search);
-    }
-
-    function applyFilters() {
-      const search = state.filters.search.trim().toLowerCase();
-      const minPrice = parseNumber(state.filters.minPrice);
-      const maxPrice = parseNumber(state.filters.maxPrice);
-      const minUnitPrice = parseNumber(state.filters.minUnitPrice);
-      const maxUnitPrice = parseNumber(state.filters.maxUnitPrice);
-      const minVolume = parseNumber(state.filters.minVolume);
-      const maxVolume = parseNumber(state.filters.maxVolume);
-
-      let rows = state.data.filter((item) => {
-        if (!matchesSearch(item, search)) {
-          return false;
-        }
-
-        if (minPrice !== null && item.price < minPrice) {
-          return false;
-        }
-        if (maxPrice !== null && item.price > maxPrice) {
-          return false;
-        }
-        if (minUnitPrice !== null && item.unitPrice < minUnitPrice) {
-          return false;
-        }
-        if (maxUnitPrice !== null && item.unitPrice > maxUnitPrice) {
-          return false;
-        }
-        if (minVolume !== null && item.volumeCm3 < minVolume) {
-          return false;
-        }
-        if (maxVolume !== null && item.volumeCm3 > maxVolume) {
-          return false;
-        }
-
-        return true;
-      });
-
-      rows.sort((left, right) => {
-        const direction = state.filters.sortDirection === 'asc' ? 1 : -1;
-        const key = state.filters.sortBy;
-
-        if (key === 'name') {
-          return left.name.localeCompare(right.name, 'pl') * direction;
-        }
-
-        return (left[key] - right[key]) * direction;
-      });
-
-      if (state.filters.onlyBest === 'top10') {
-        rows = rows.slice(0, 10);
-      }
-
-      if (state.filters.onlyBest === 'top25') {
-        rows = rows.slice(0, 25);
-      }
-
-      return rows;
-    }
-
-    function renderTable(rows) {
-      if (!rows.length) {
-        els.tableBody.innerHTML = '<tr><td colspan="6" class="empty">No products match your filters.</td></tr>';
-        return;
-      }
-
-      els.tableBody.innerHTML = rows.map((item, index) => {
-        const dimensions = item.dimensionsMm.join(' × ') + ' mm';
-        const rankLabel = String(index + 1).padStart(2, '0');
-
-        return `
-          <tr>
-            <td><span class="rank">${rankLabel}</span></td>
-            <td>
-              <div class="name">${item.name}</div>
-              <a class="url" href="${item.url}" target="_blank" rel="noreferrer">Open product page</a>
-            </td>
-            <td><span class="pill">${currency.format(item.price)}</span></td>
-            <td>${dimensions}</td>
-            <td>${decimal.format(item.volumeCm3)} cm3</td>
-            <td><span class="pill">${precise.format(item.unitPrice)} PLN/cm3</span></td>
-          </tr>
-        `;
-      }).join('');
-    }
-
-    function render() {
-      const rows = applyFilters();
-      updateStats(rows);
-      renderTable(rows);
-      els.resultCount.textContent = `${rows.length} product${rows.length === 1 ? '' : 's'} shown out of ${state.data.length}.`;
-      els.sortDirection.textContent = state.filters.sortDirection === 'asc' ? 'Ascending' : 'Descending';
-    }
-
-    function wireControl(element, key) {
-      element.addEventListener('input', () => {
-        state.filters[key] = element.value;
-        render();
-      });
-    }
-
-    wireControl(els.search, 'search');
-    wireControl(els.sortBy, 'sortBy');
-    wireControl(els.minPrice, 'minPrice');
-    wireControl(els.maxPrice, 'maxPrice');
-    wireControl(els.minUnitPrice, 'minUnitPrice');
-    wireControl(els.maxUnitPrice, 'maxUnitPrice');
-    wireControl(els.minVolume, 'minVolume');
-    wireControl(els.maxVolume, 'maxVolume');
-    wireControl(els.onlyBest, 'onlyBest');
-
-    els.sortDirection.addEventListener('click', () => {
-      state.filters.sortDirection = state.filters.sortDirection === 'asc' ? 'desc' : 'asc';
-      render();
-    });
-
-    els.resetFilters.addEventListener('click', () => {
-      state.filters = {
-        search: '',
-        sortBy: 'unitPrice',
-        sortDirection: 'asc',
-        minPrice: '',
-        maxPrice: '',
-        minUnitPrice: '',
-        maxUnitPrice: '',
-        minVolume: '',
-        maxVolume: '',
-        onlyBest: 'all'
-      };
-
-      els.search.value = '';
-      els.sortBy.value = 'unitPrice';
-      els.minPrice.value = '';
-      els.maxPrice.value = '';
-      els.minUnitPrice.value = '';
-      els.maxUnitPrice.value = '';
-      els.minVolume.value = '';
-      els.maxVolume.value = '';
-      els.onlyBest.value = 'all';
-
-      render();
-    });
-
-    async function loadData() {
-      try {
-        const response = await fetch('/api/data');
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const payload = await response.json();
-        state.data = Array.isArray(payload.ranked) ? payload.ranked : [];
-
-        if (payload.generatedAt) {
-          els.lastUpdated.textContent = `Generated at ${new Date(payload.generatedAt).toLocaleString('pl-PL')}`;
-        }
-
-        render();
-      } catch (error) {
-        els.resultCount.textContent = 'Unable to load data.';
-        els.tableBody.innerHTML = `<tr><td colspan="6" class="empty">${error.message}</td></tr>`;
-      }
-    }
-
-    loadData();
-  </script>
+  <script src="../src/viewer-server.js"></script>
 </body>
 </html>
