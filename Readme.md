@@ -35,26 +35,14 @@ The scraper reads pagination on the first category page to detect the last page 
 Optional environment variables:
 
 - `MAX_PAGES` - max number of category pages to scan (`0` = all pages)
-- `CONCURRENCY` - number of parallel product-page fetches
-- `RETRIES` - retries for failed HTTP requests (default: `4`)
-- `RETRY_BASE_DELAY_MS` - base delay before retry, exponential backoff (default: `800`)
-- `NO_NEW_PAGES_TO_STOP` - stop after this many pages with no new product URLs (default: `2`)
-- `HARD_PAGE_CAP` - fail-safe max page number when scanning all pages (default: `500`)
-- `OUTPUT_FILE` - path to JSON output file (default: `output/intercooler-value-ranking.json`)
-
-When `MAX_PAGES=0`, the effective page limit is the detected last page from pagination (with `HARD_PAGE_CAP` as fallback safety).
 
 Example:
 
 ```bash
-MAX_PAGES=2 CONCURRENCY=4 npm start
+MAX_PAGES=2 npm start
 ```
 
 Custom JSON output path example:
-
-```bash
-OUTPUT_FILE=results/fmic-all-products.json npm start
-```
 
 ## Output
 
