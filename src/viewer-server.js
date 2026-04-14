@@ -1,111 +1,65 @@
-let allProducts = []; 
-let currentData = []; 
-let currentSortColumn = 'originalRank'; 
-let sortAscending = true; 
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
-async function loadData() {
-  try {
-    const response = await fetch('../output/wyniki.json');
-    if (!response.ok) throw new Error('Nie udało się załadować pliku wyniki.json');
+const PORT = process.env.PORT || 3000;
+const projectRoot = path.resolve(__dirname, '..');
 
-    const data = await response.json();
-    
-    allProducts = data.map((item, index) => {
-      return { ...item, originalRank: index + 1 };
-    });
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon'
+};
 
-    currentData = [...allProducts];
-    renderTable(currentData);
-
-  } catch (error) {
-    console.error('Błąd:', error);
-    document.getElementById('error-msg').style.display = 'block';
-    document.getElementById('error-msg').innerHTML = `
-      Wystąpił błąd podczas ładowania danych.<br><br>
-    `;
+function resolvePath(urlPath) {
+  if (urlPath === '/' || urlPath === '') {
+    return path.join(projectRoot, 'public', 'index.html');
   }
+
+  if (urlPath.startsWith('/output/')) {
+    return path.join(projectRoot, urlPath);
+  }
+
+  return path.join(projectRoot, 'public', urlPath);
 }
 
-function renderTable(dataToRender) {
-  const tbody = document.getElementById('results-body');
-  tbody.innerHTML = ''; 
+function isInsideProjectRoot(filePath) {
+  const normalizedRoot = path.normalize(projectRoot + path.sep);
+  const normalizedPath = path.normalize(filePath);
+  return normalizedPath.startsWith(normalizedRoot);
+}
 
-  if (dataToRender.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">Brak wyników dla podanych filtrów.</td></tr>`;
+const server = http.createServer((req, res) => {
+  const requestedPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  const filePath = resolvePath(requestedPath);
+
+  if (!isInsideProjectRoot(filePath)) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bad request');
     return;
   }
 
-  dataToRender.forEach(item => {
-    const tr = document.createElement('tr');
-
-    let rankDisplay = item.originalRank;
-    if (rankDisplay === 1) rankDisplay = '🥇 1';
-    if (rankDisplay === 2) rankDisplay = '🥈 2';
-    if (rankDisplay === 3) rankDisplay = '🥉 3';
-
-    tr.innerHTML = `
-      <td><strong>${rankDisplay}</strong></td>
-      <td>${item.name}</td>
-      <td>${item.wymiary}<br><small>(${item.pojemnoscCm3.toFixed(2)} cm³)</small></td>
-      <td class="price-col">${item.price.toFixed(2)} PLN</td>
-      <td><strong>${item.cenaZaCm3.toFixed(8)}</strong></td>
-      <td><a href="${item.url}" target="_blank" class="btn btn-link">Zobacz</a></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function applyFilters() {
-  const minPrice = parseFloat(document.getElementById('min-price').value) || 0;
-  const maxPrice = parseFloat(document.getElementById('max-price').value) || Infinity;
-
-  currentData = allProducts.filter(item => {
-    return item.price >= minPrice && item.price <= maxPrice;
-  });
-
-  sortData(currentSortColumn, sortAscending);
-}
-
-function resetFilters() {
-  document.getElementById('min-price').value = '';
-  document.getElementById('max-price').value = '';
-  currentData = [...allProducts];
-  sortData('originalRank', true); // powrót do domyślnego sortowania
-}
-
-function sortData(column, asc = true) {
-  currentSortColumn = column;
-  sortAscending = asc;
-
-  currentData.sort((a, b) => {
-    let valA = a[column];
-    let valB = b[column];
-
-    if (typeof valA === 'string') {
-      return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
-    } else {
-      return asc ? valA - valB : valB - valA;
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
     }
-  });
 
-  renderTable(currentData);
-}
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-
-document.getElementById('filter-btn').addEventListener('click', applyFilters);
-
-document.getElementById('reset-btn').addEventListener('click', resetFilters);
-
-document.querySelectorAll('th.sortable').forEach(th => {
-  th.addEventListener('click', () => {
-    const column = th.getAttribute('data-sort');
-    
-    if (currentSortColumn === column) {
-      sortData(column, !sortAscending);
-    } else {
-      sortData(column, true); 
-    }
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
   });
 });
 
-loadData();
+server.listen(PORT, () => {
+  console.log(`Viewer running at http://localhost:${PORT}`);
+});
