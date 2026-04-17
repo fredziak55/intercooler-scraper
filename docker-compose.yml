@@ -1,0 +1,29 @@
+services:
+  scraper:
+    build:
+      context: .
+    image: intercooler-scraper:latest
+    container_name: intercooler-scraper
+    command: ["node", "src/scraper.js"]
+    environment:
+      MAX_PAGES: "${MAX_PAGES:-0}"
+    volumes:
+      - scraper_output:/app/output
+    restart: "no"
+
+  viewer:
+    image: intercooler-scraper:latest
+    container_name: intercooler-viewer
+    command: ["node", "src/viewer-server.js"]
+    environment:
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - scraper_output:/app/output:ro
+    depends_on:
+      - scraper
+    restart: unless-stopped
+
+volumes:
+  scraper_output:
